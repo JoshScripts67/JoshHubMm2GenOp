@@ -1,3 +1,2 @@
-main.py
 discord.py
 requests

